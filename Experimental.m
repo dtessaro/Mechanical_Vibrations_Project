@@ -8,16 +8,16 @@ plot_dataRaw    = 0;
 plot_hummer     = 0;
 plot_FFT        = 1;
 
-plot_data = 0;
-    plot_data_acc1      = 1;
-    plot_data_acc2      = 1;
+plot_data = 1;
+    plot_data_acc1      = 0;
+    plot_data_acc2      = 0;
     plot_data_diff      = 1; 
     plot_data_acc_mean  = 1;
     
 %% Other settings
 %time window
 window = [1.23 1.4];
-
+fs = 51200;
 %% Load Raw Data
 dataRaw = readtable('data.txt');
 dataRaw.Properties.VariableNames = {'time','hum','acc1','acc2'};
@@ -30,13 +30,12 @@ data = dataRaw(dataRaw.time>= window(1) & dataRaw.time <= window(2),:);
 data.acc_mean = (data.acc1-data.acc2)/2;
 %compute diff with the difference between 2 accelerometer
 data.diff = data.acc1+data.acc2;
-
+data.smooth = smooth(data.acc_mean);
 
 %% Experimental Transfer function
 
-d= table(data.time,data.hum,data.acc_mean,'VariableNames',{'time','hum','acc'});
+d= table(data.time,data.hum,data.acc_mean,data.smooth,'VariableNames',{'time','hum','acc','smooth'});
 
-fs = 51200;
 [Tf,Fr] = tfestimate(d.hum,d.acc,[],[],[],fs);
 TF = table(Fr,Tf,abs(Tf),angle(Tf),'VariableNames',{'fr','tf','mod','phase'});
 
@@ -46,8 +45,11 @@ peak = [peak,TF.fr(peak_f)];
 peak = sortrows(peak,1,'descend');
 peak = peak(1:3,:);
 
-%% Acceleration with ony first 3frequency
+%% Estimate damping ratio with half power point method
 
+x0 = 1
+g=2
+sol = fsolve(@(x) interp1(TF.fr,TF.mod,x,'spline')-g,x0);
 %% Plot data
 
 if plot_dataRaw
@@ -103,9 +105,10 @@ if plot_data
         leg = [leg, "Noise"];
     end
     if plot_data_acc_mean
-        plot(data.time,data.acc_mean); hold on;
+        plot(data.time,data.smooth); hold on;
         leg = [leg, "Acc Mean"];
     end
+
 
     grid on;
     legend(leg);
@@ -118,7 +121,6 @@ if plot_FFT
    
     figure('Name','Trunsfer Function','NumberTitle','off');
 
-    % Raw Plot
     t = tiledlayout(2,1);
 
     ax1 = nexttile;
@@ -126,6 +128,7 @@ if plot_FFT
     plot([peak(1,2),peak(1,2)],[peak(1,1),0],'r');
     plot([peak(2,2),peak(2,2)],[peak(2,1),0],'r');
     plot([peak(3,2),peak(3,2)],[peak(3,1),0],'r');
+    plot([0,2000],[g,g],'r');
     title(ax1,'Magnitude')
     ylabel('Module');
 
@@ -136,6 +139,7 @@ if plot_FFT
     ylabel('Phase');
 
     xlabel('Frequency [Hz]');
+    
     grid on;
 
     linkaxes([ax1,ax2],'x');
